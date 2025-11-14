@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, status
-from models.cita import Cita, CitaResponse
+from models.medico import Medico, MedicoResponse
 from typing import List
 import pyodbc
 
-router = APIRouter(prefix="/citas", tags=["citas"])
+router = APIRouter(prefix="/medicos", tags=["medicos"])
 
 CONNECTION_STRING = (
     "DRIVER={ODBC Driver 17 for SQL Server};"
@@ -18,86 +18,92 @@ def _get_connection():
     return pyodbc.connect(CONNECTION_STRING)
 
 
-def _row_to_cita_response(row) -> CitaResponse:
-    """Convierte una fila de la base de datos a un modelo CitaResponse"""
-    return CitaResponse(
-        IdCita=row.IdCita,
-        IdPaciente=row.IdPaciente,
+def _row_to_medico_response(row) -> MedicoResponse:
+    """Convierte una fila de la base de datos a un modelo MedicoResponse"""
+    return MedicoResponse(
         IdMedico=row.IdMedico,
-        FechaCita=row.FechaCita,
-        Motivo=row.Motivo,
-        Estado=row.Estado
+        Nombre=row.Nombre,
+        Apellido=row.Apellido,
+        Especialidad=row.Especialidad,
+        Telefono=row.Telefono,
+        Email=row.Email
     )
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=dict)
-def crear_cita(cita: Cita):
-    """Crear una nueva cita"""
+def crear_medico(medico: Medico):
+    """Crear un nuevo médico"""
     conn = None
     try:
         conn = _get_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO Citas (IdPaciente, IdMedico, FechaCita, Motivo, Estado)
+            INSERT INTO Medicos (Nombre, Apellido, Especialidad, Telefono, Email)
             VALUES (?, ?, ?, ?, ?)
-        """, cita.IdPaciente, cita.IdMedico, cita.FechaCita, cita.Motivo, cita.Estado)
+        """, (
+            medico.Nombre,
+            medico.Apellido,
+            medico.Especialidad,
+            medico.Telefono,
+            medico.Email
+        ))
         conn.commit()
-        return {"mensaje": "Cita creada exitosamente"}
+        return {"mensaje": "Médico creado exitosamente"}
     except pyodbc.Error as e:
         if conn:
             conn.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al crear la cita: {str(e)}"
+            detail=f"Error al crear el médico: {str(e)}"
         )
     finally:
         if conn:
             conn.close()
 
 
-@router.get("/", response_model=List[CitaResponse])
-def obtener_citas():
-    """Obtener todas las citas"""
+@router.get("/", response_model=List[MedicoResponse])
+def obtener_medicos():
+    """Obtener todos los médicos"""
     conn = None
     try:
         conn = _get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Citas ORDER BY FechaCita DESC")
+        cursor.execute("SELECT * FROM Medicos ORDER BY Apellido, Nombre")
         rows = cursor.fetchall()
-        return [_row_to_cita_response(row) for row in rows]
+        return [_row_to_medico_response(row) for row in rows]
     except pyodbc.Error as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener las citas: {str(e)}"
+            detail=f"Error al obtener los médicos: {str(e)}"
         )
     finally:
         if conn:
             conn.close()
 
 
-@router.get("/{id}", response_model=CitaResponse)
-def obtener_cita(id: int):
-    """Obtener una cita por ID"""
+@router.get("/{id}", response_model=MedicoResponse)
+def obtener_medico(id: int):
+    """Obtener un médico por ID"""
     conn = None
     try:
         conn = _get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Citas WHERE IdCita = ?", (id,))
+        cursor.execute("SELECT * FROM Medicos WHERE IdMedico = ?", (id,))
         row = cursor.fetchone()
         
         if row is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Cita con ID {id} no encontrada"
+                detail=f"Médico con ID {id} no encontrado"
             )
         
-        return _row_to_cita_response(row)
+        return _row_to_medico_response(row)
     except HTTPException:
         raise
     except pyodbc.Error as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener la cita: {str(e)}"
+            detail=f"Error al obtener el médico: {str(e)}"
         )
     finally:
         if conn:
@@ -105,26 +111,33 @@ def obtener_cita(id: int):
 
 
 @router.put("/{id}", response_model=dict)
-def actualizar_cita(id: int, cita: Cita):
-    """Actualizar una cita existente"""
+def actualizar_medico(id: int, medico: Medico):
+    """Actualizar un médico existente"""
     conn = None
     try:
         conn = _get_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            UPDATE Citas
-            SET IdPaciente = ?, IdMedico = ?, FechaCita = ?, Motivo = ?, Estado = ?
-            WHERE IdCita = ?
-        """, cita.IdPaciente, cita.IdMedico, cita.FechaCita, cita.Motivo, cita.Estado, id)
+            UPDATE Medicos
+            SET Nombre = ?, Apellido = ?, Especialidad = ?, Telefono = ?, Email = ?
+            WHERE IdMedico = ?
+        """, (
+            medico.Nombre,
+            medico.Apellido,
+            medico.Especialidad,
+            medico.Telefono,
+            medico.Email,
+            id
+        ))
         
         if cursor.rowcount == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Cita con ID {id} no encontrada"
+                detail=f"Médico con ID {id} no encontrado"
             )
         
         conn.commit()
-        return {"mensaje": "Cita actualizada exitosamente"}
+        return {"mensaje": "Médico actualizado exitosamente"}
     except HTTPException:
         if conn:
             conn.rollback()
@@ -134,7 +147,7 @@ def actualizar_cita(id: int, cita: Cita):
             conn.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al actualizar la cita: {str(e)}"
+            detail=f"Error al actualizar el médico: {str(e)}"
         )
     finally:
         if conn:
@@ -142,22 +155,22 @@ def actualizar_cita(id: int, cita: Cita):
 
 
 @router.delete("/{id}", response_model=dict)
-def eliminar_cita(id: int):
-    """Eliminar una cita"""
+def eliminar_medico(id: int):
+    """Eliminar un médico"""
     conn = None
     try:
         conn = _get_connection()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM Citas WHERE IdCita = ?", (id,))
+        cursor.execute("DELETE FROM Medicos WHERE IdMedico = ?", (id,))
         
         if cursor.rowcount == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Cita con ID {id} no encontrada"
+                detail=f"Médico con ID {id} no encontrado"
             )
         
         conn.commit()
-        return {"mensaje": "Cita eliminada exitosamente"}
+        return {"mensaje": "Médico eliminado exitosamente"}
     except HTTPException:
         if conn:
             conn.rollback()
@@ -167,7 +180,7 @@ def eliminar_cita(id: int):
             conn.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al eliminar la cita: {str(e)}"
+            detail=f"Error al eliminar el médico: {str(e)}"
         )
     finally:
         if conn:
