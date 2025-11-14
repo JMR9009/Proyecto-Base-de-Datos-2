@@ -2,20 +2,15 @@ from fastapi import APIRouter, HTTPException, status
 from models.cita import Cita, CitaResponse
 from typing import List
 import pyodbc
+from database import Database
+from exceptions import NotFoundError, DatabaseError
 
 router = APIRouter(prefix="/citas", tags=["citas"])
-
-CONNECTION_STRING = (
-    "DRIVER={ODBC Driver 17 for SQL Server};"
-    "SERVER=MANUEL\\MSSQL2022;"
-    "DATABASE=ClinicaMedica;"
-    "Trusted_Connection=yes;"
-)
 
 
 def _get_connection():
     """Obtiene una conexión a la base de datos"""
-    return pyodbc.connect(CONNECTION_STRING)
+    return Database.get_connection()
 
 
 def _row_to_cita_response(row) -> CitaResponse:

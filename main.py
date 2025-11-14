@@ -1,10 +1,21 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from routers import paciente_router, medico_router, cita_router
+from config import settings
 
 app = FastAPI(
-    title="API Clínica Médica",
-    description="API para gestión de pacientes, médicos y citas",
-    version="1.0.0"
+    title=settings.API_TITLE,
+    description=settings.API_DESCRIPTION,
+    version=settings.API_VERSION
+)
+
+# Configurar CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Incluir routers
@@ -17,11 +28,33 @@ app.include_router(cita_router.router)
 def root():
     """Endpoint raíz de la API"""
     return {
-        "mensaje": "API Clínica Médica",
-        "version": "1.0.0",
+        "mensaje": settings.API_TITLE,
+        "version": settings.API_VERSION,
+        "documentacion": {
+            "swagger": "/docs",
+            "redoc": "/redoc"
+        },
         "endpoints": {
             "pacientes": "/pacientes",
             "medicos": "/medicos",
             "citas": "/citas"
         }
     }
+
+
+@app.get("/health")
+def health_check():
+    """Endpoint para verificar el estado de la API"""
+    try:
+        from database import Database
+        Database.get_connection().close()
+        return {
+            "status": "healthy",
+            "database": "connected"
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": "disconnected",
+            "error": str(e)
+        }
