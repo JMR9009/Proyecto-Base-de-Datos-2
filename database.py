@@ -50,4 +50,3 @@ class Database:
         finally:
             if conn:
                 conn.close()
-

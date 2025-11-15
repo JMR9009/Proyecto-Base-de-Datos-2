@@ -35,7 +35,7 @@ def crear_cita(cita: Cita):
         cursor.execute("""
             INSERT INTO Citas (IdPaciente, IdMedico, FechaCita, Motivo, Estado)
             VALUES (?, ?, ?, ?, ?)
-        """, cita.IdPaciente, cita.IdMedico, cita.FechaCita, cita.Motivo, cita.Estado)
+        """, (cita.IdPaciente, cita.IdMedico, cita.FechaCita, cita.Motivo, cita.Estado))
         conn.commit()
         return {"mensaje": "Cita creada exitosamente"}
     except pyodbc.Error as e:
@@ -110,7 +110,7 @@ def actualizar_cita(id: int, cita: Cita):
             UPDATE Citas
             SET IdPaciente = ?, IdMedico = ?, FechaCita = ?, Motivo = ?, Estado = ?
             WHERE IdCita = ?
-        """, cita.IdPaciente, cita.IdMedico, cita.FechaCita, cita.Motivo, cita.Estado, id)
+        """, (cita.IdPaciente, cita.IdMedico, cita.FechaCita, cita.Motivo, cita.Estado, id))
         
         if cursor.rowcount == 0:
             raise HTTPException(
