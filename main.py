@@ -44,10 +44,20 @@ app.add_middleware(ContentTypeValidationMiddleware)
 # Configurar CORS de forma más segura
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"] if not IS_PRODUCTION else [],
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://localhost:3001",  # Puerto alternativo del frontend
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:5173",
+        "https://localhost:3000",  # HTTPS en desarrollo
+        "https://localhost:3001",
+        "https://localhost:5173"
+    ] if not IS_PRODUCTION else [],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],  # Solo métodos necesarios
-    allow_headers=["Content-Type", "Authorization"],  # Solo headers necesarios
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],  # Incluir OPTIONS para preflight
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],  # Headers necesarios
     expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "X-Process-Time"]
 )
 
@@ -59,65 +69,45 @@ from init_admin import init_admin_user
 init_admin_user()
 
 # Incluir routers
+from routers import (
+    paciente_router, medico_router, departamento_router, puesto_router, 
+    asignacion_router, contrato_router, capacitacion_router, asignacion_capacitacion_router,
+    evaluacion_desempeno_router, criterio_evaluacion_router, concepto_nomina_router, nomina_router,
+    vacacion_router, permiso_router, balance_vacacion_router, documento_router, version_documento_router,
+    categoria_documento_router, historial_documento_router, usuario_router, rol_router, historial_usuario_router
+)
+
 app.include_router(cita_router.router)
 app.include_router(auth_router.router)
 app.include_router(empleado_router.router)
 app.include_router(asistencia_router.router)
-
-
-class Medico(BaseModel):
-    Nombre: str = Field(..., min_length=1, max_length=100)
-    Apellido: str = Field(..., min_length=1, max_length=100)
-    Especialidad: str = Field(..., min_length=1, max_length=100)
-    Telefono: str = Field(..., min_length=8, max_length=20)
-    Email: EmailStr
-    
-    @validator('Nombre', 'Apellido', 'Especialidad')
-    def sanitize_text(cls, v):
-        return sanitize_string(v, max_length=100)
-    
-    @validator('Telefono')
-    def validate_phone(cls, v):
-        v = sanitize_string(v, max_length=20)
-        if not validate_phone(v):
-            raise ValueError('Formato de teléfono inválido')
-        return v
-
-class Paciente(BaseModel):
-    Nombre: str = Field(..., min_length=1, max_length=100)
-    Apellido: str = Field(..., min_length=1, max_length=100)
-    FechaNacimiento: str = Field(..., min_length=10, max_length=10)
-    Genero: str = Field(..., min_length=1, max_length=20)
-    Telefono: str = Field(..., min_length=8, max_length=20)
-    Email: EmailStr
-    Direccion: Optional[str] = Field(None, max_length=255)
-    
-    @validator('Nombre', 'Apellido', 'Genero')
-    def sanitize_text(cls, v):
-        return sanitize_string(v, max_length=100)
-    
-    @validator('FechaNacimiento')
-    def validate_date(cls, v):
-        if not validate_date(v):
-            raise ValueError('Formato de fecha inválido. Use YYYY-MM-DD')
-        return v
-    
-    @validator('Telefono')
-    def validate_phone(cls, v):
-        v = sanitize_string(v, max_length=20)
-        if not validate_phone(v):
-            raise ValueError('Formato de teléfono inválido')
-        return v
-    
-    @validator('Direccion')
-    def sanitize_address(cls, v):
-        if v is None:
-            return None
-        return sanitize_string(v, max_length=255)
+app.include_router(paciente_router.router)
+app.include_router(medico_router.router)
+app.include_router(departamento_router.router)
+app.include_router(puesto_router.router)
+app.include_router(asignacion_router.router)
+app.include_router(contrato_router.router)
+app.include_router(capacitacion_router.router)
+app.include_router(asignacion_capacitacion_router.router)
+app.include_router(evaluacion_desempeno_router.router)
+app.include_router(criterio_evaluacion_router.router)
+app.include_router(concepto_nomina_router.router)
+app.include_router(nomina_router.router)
+app.include_router(vacacion_router.router)
+app.include_router(permiso_router.router)
+app.include_router(balance_vacacion_router.router)
+app.include_router(documento_router.router)
+app.include_router(version_documento_router.router)
+app.include_router(categoria_documento_router.router)
+app.include_router(historial_documento_router.router)
+app.include_router(usuario_router.router)
+app.include_router(rol_router.router)
+app.include_router(historial_usuario_router.router)
 
 @app.get("/")
 def root():
     return {"mensaje": "API Clínica Médica", "version": "1.0.0"}
+
 
 @app.get("/health")
 def health_check():
@@ -161,263 +151,3 @@ async def internal_error_handler(request: Request, exc):
             "message": error_msg
         }
     )
-
-@app.post("/medicos")
-def crear_medico(medico: Medico):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO Medicos (Nombre, Apellido, Especialidad, Telefono, Email)
-            VALUES (?, ?, ?, ?, ?)
-        """, (medico.Nombre, medico.Apellido, medico.Especialidad, medico.Telefono, medico.Email))
-        conn.commit()
-        medico_id = cursor.lastrowid
-        logger.info(f"Médico creado: ID {medico_id}")
-        return {"mensaje": "Médico creado exitosamente", "IdMedico": medico_id}
-    except Exception as e:
-        logger.error(f"Error al crear médico: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
-
-@app.get("/medicos")
-def obtener_medicos():
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Medicos")
-        rows = cursor.fetchall()
-        medicos = [dict(row) for row in rows]
-        return medicos
-    except Exception as e:
-        logger.error(f"Error al obtener médicos: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
-
-@app.get("/medicos/{id}")
-def obtener_medico(id: int):
-    if id <= 0:
-        raise HTTPException(status_code=400, detail="ID inválido")
-    
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Medicos WHERE IdMedico = ?", (id,))
-        row = cursor.fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="Médico no encontrado")
-        medico = dict(row)
-        return medico
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al obtener médico {id}: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
-
-@app.put("/medicos/{id}")
-def actualizar_medico(id: int, medico: Medico):
-    if id <= 0:
-        raise HTTPException(status_code=400, detail="ID inválido")
-    
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE Medicos
-            SET Nombre = ?, Apellido = ?, Especialidad = ?, Telefono = ?, Email = ?
-            WHERE IdMedico = ?
-        """, (medico.Nombre, medico.Apellido, medico.Especialidad, medico.Telefono, medico.Email, id))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Médico no encontrado")
-        conn.commit()
-        logger.info(f"Médico actualizado: ID {id}")
-        return {"mensaje": "Médico actualizado exitosamente"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al actualizar médico {id}: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
-
-@app.delete("/medicos/{id}")
-def eliminar_medico(id: int):
-    if id <= 0:
-        raise HTTPException(status_code=400, detail="ID inválido")
-    
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        # Verificar si hay citas asociadas
-        cursor.execute("SELECT COUNT(*) FROM Citas WHERE IdMedico = ?", (id,))
-        citas_count = cursor.fetchone()[0]
-        if citas_count > 0:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"No se puede eliminar el médico porque tiene {citas_count} cita(s) asociada(s)"
-            )
-        
-        cursor.execute("DELETE FROM Medicos WHERE IdMedico = ?", (id,))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Médico no encontrado")
-        conn.commit()
-        logger.info(f"Médico eliminado: ID {id}")
-        return {"mensaje": "Médico eliminado exitosamente"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al eliminar médico {id}: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
-
-# Endpoints de Pacientes
-@app.get("/pacientes")
-def obtener_pacientes():
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Pacientes")
-        rows = cursor.fetchall()
-        pacientes = [dict(row) for row in rows]
-        return pacientes
-    except Exception as e:
-        logger.error(f"Error al obtener pacientes: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
-
-@app.get("/pacientes/{id}")
-def obtener_paciente(id: int):
-    if id <= 0:
-        raise HTTPException(status_code=400, detail="ID inválido")
-    
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Pacientes WHERE IdPaciente = ?", (id,))
-        row = cursor.fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="Paciente no encontrado")
-        paciente = dict(row)
-        return paciente
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al obtener paciente {id}: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
-
-@app.post("/pacientes")
-def crear_paciente(paciente: Paciente):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO Pacientes (Nombre, Apellido, FechaNacimiento, Genero, Telefono, Email, Direccion)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (paciente.Nombre, paciente.Apellido, paciente.FechaNacimiento, 
-             paciente.Genero, paciente.Telefono, paciente.Email, paciente.Direccion))
-        conn.commit()
-        paciente_id = cursor.lastrowid
-        logger.info(f"Paciente creado: ID {paciente_id}")
-        return {"mensaje": "Paciente creado exitosamente", "IdPaciente": paciente_id}
-    except Exception as e:
-        logger.error(f"Error al crear paciente: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
-
-@app.put("/pacientes/{id}")
-def actualizar_paciente(id: int, paciente: Paciente):
-    if id <= 0:
-        raise HTTPException(status_code=400, detail="ID inválido")
-    
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE Pacientes
-            SET Nombre = ?, Apellido = ?, FechaNacimiento = ?, Genero = ?, 
-                Telefono = ?, Email = ?, Direccion = ?
-            WHERE IdPaciente = ?
-        """, (paciente.Nombre, paciente.Apellido, paciente.FechaNacimiento, 
-             paciente.Genero, paciente.Telefono, paciente.Email, paciente.Direccion, id))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Paciente no encontrado")
-        conn.commit()
-        logger.info(f"Paciente actualizado: ID {id}")
-        return {"mensaje": "Paciente actualizado exitosamente"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al actualizar paciente {id}: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
-
-@app.delete("/pacientes/{id}")
-def eliminar_paciente(id: int):
-    if id <= 0:
-        raise HTTPException(status_code=400, detail="ID inválido")
-    
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        # Verificar si hay citas asociadas
-        cursor.execute("SELECT COUNT(*) FROM Citas WHERE IdPaciente = ?", (id,))
-        citas_count = cursor.fetchone()[0]
-        if citas_count > 0:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"No se puede eliminar el paciente porque tiene {citas_count} cita(s) asociada(s)"
-            )
-        
-        cursor.execute("DELETE FROM Pacientes WHERE IdPaciente = ?", (id,))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Paciente no encontrado")
-        conn.commit()
-        logger.info(f"Paciente eliminado: ID {id}")
-        return {"mensaje": "Paciente eliminado exitosamente"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al eliminar paciente {id}: {str(e)}", exc_info=True)
-        error_msg = safe_error_message(e, IS_PRODUCTION)
-        raise HTTPException(status_code=500, detail=error_msg)
-    finally:
-        if conn:
-            conn.close()
